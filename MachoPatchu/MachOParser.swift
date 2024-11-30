@@ -23,31 +23,57 @@ enum FileType {
 }
 
 
-struct MachoOParser {
+struct MachOParser {
     
     /// The file data.
     let data: Data
     
+    /// Lookup dictionary: the library paths to replace.
+    let replace: [String: String]
+    
+    let verbose: Bool
+    
     /// Designated initializer.
-    init(data: Data) {
+    init(data: Data, replace: [(String, String)], verbose: Bool) {
         self.data = data
+        self.replace = replace.reduce(into: [:], { $0[$1.0] = $1.1 })
+        self.verbose = verbose
     }
     
 }
 
 
-extension MachoOParser {
+extension MachOParser {
+    
+    /// Result of the parsing process.
+    struct Result {
+        /// The patched data.
+        let data: Data
+        
+        /// Whether the Mach-O file is signed. The signature is now invalid.
+        let hasSignature: Bool
+    }
+    
     
     /// Parse and process the file.
-    func parse() throws(ParserError) {
+    func parse() throws(ParserError) -> Result {
         do {
             var data = self.data
+            var context = Context()
             try data.withUnsafeMutableBytes {
                 (pointer) throws /* (ParserError) */ in
                 // See https://github.com/swiftlang/swift/issues/77880
                 
-                try enumerateArchitectures(pointer, handler: parseLoadCommands)
+                try enumerateArchitectures(pointer, context: &context, handler: parseLoadCommands)
             }
+            
+            if context.didReplace.count != self.replace.count {
+                let missing = self.replace.keys.filter { !context.didReplace.contains($0) }
+                throw ParserError.librariesNotFound(missing.sorted())
+            }
+            
+            return Result(data: data, hasSignature: context.hasSignature)
+            
         } catch let error as ParserError {
             throw error
         } catch {
@@ -59,7 +85,20 @@ extension MachoOParser {
 
 
 private
-extension MachoOParser {
+extension MachOParser {
+    
+    struct Context {
+        var didReplace: Set<String> = []
+        var hasSignature: Bool = false
+    }
+    
+    /// Print a message if verbose mode is enabled.
+    func print(_ message: String) {
+        if self.verbose {
+            Swift.print(message)
+        }
+    }
+    
     
     /// Parse the magic number to determine the type of file to deal with.
     func parseMagic(_ pointer: UnsafeMutableRawBufferPointer) throws(ParserError) -> FileType {
@@ -92,25 +131,27 @@ extension MachoOParser {
     /// Parse the header and enumerate each architecture in the file.
     func enumerateArchitectures(
         _ pointer: UnsafeMutableRawBufferPointer,
-        handler: (UnsafeMutableRawBufferPointer) throws(ParserError) -> Void
+        context: inout Context,
+        handler: (UnsafeMutableRawBufferPointer, inout Context) throws(ParserError) -> Void
     ) throws(ParserError) {
         switch try parseMagic(pointer) {
         case .plain:
             // It's a plain MachO file, can parse it directly.
-            try handler(pointer)
+            try handler(pointer, &context)
             
         case .fat32bit:
-            try enumerateArchitectures32bit(pointer, handler: handler)
+            try enumerateArchitectures32bit(pointer, context: &context, handler: handler)
             
         case .fat64bit:
-            try enumerateArchitectures64bit(pointer, handler: handler)
+            try enumerateArchitectures64bit(pointer, context: &context, handler: handler)
         }
     }
     
     
     func enumerateArchitectures32bit(
         _ pointer: UnsafeMutableRawBufferPointer,
-        handler: (UnsafeMutableRawBufferPointer) throws(ParserError) -> Void
+        context: inout Context,
+        handler: (UnsafeMutableRawBufferPointer, inout Context) throws(ParserError) -> Void
     ) throws(ParserError) {
         let headerSize = MemoryLayout<fat_header>.size
         guard pointer.count >= headerSize, let baseAddress = pointer.baseAddress else {
@@ -135,7 +176,6 @@ extension MachoOParser {
         let archsSlice = pointer[headerSize ..< headerSize + archsSize]
         try archsSlice.withMemoryRebound(to: fat_arch.self) {
             (archs) throws(ParserError) in
-            print("Iterating \(archs.count) archs")
             for arch in archs {
                 let offset: UInt32
                 let size: UInt32
@@ -160,7 +200,7 @@ extension MachoOParser {
                 case MH_MAGIC_64, MH_CIGAM_64:
                     let rebased = UnsafeMutableRawBufferPointer(
                         rebasing: pointer[Int(offset) ..< Int(offset) + Int(size)])
-                    try handler(rebased)
+                    try handler(rebased, &context)
                     
                 default:
                     throw .invalidMagic
@@ -172,7 +212,8 @@ extension MachoOParser {
     
     func enumerateArchitectures64bit(
         _ pointer: UnsafeMutableRawBufferPointer,
-        handler: (UnsafeMutableRawBufferPointer) throws(ParserError) -> Void
+        context: inout Context,
+        handler: (UnsafeMutableRawBufferPointer, inout Context) throws(ParserError) -> Void
     ) throws(ParserError) {
         let headerSize = MemoryLayout<fat_header>.size
         guard pointer.count >= headerSize, let baseAddress = pointer.baseAddress else {
@@ -197,7 +238,6 @@ extension MachoOParser {
         let archsSlice = pointer[headerSize ..< headerSize + archsSize]
         try archsSlice.withMemoryRebound(to: fat_arch_64.self) {
             (archs) throws(ParserError) in
-            print("Iterating \(archs.count) archs")
             for arch in archs {
                 let offset: UInt64
                 let size: UInt64
@@ -223,7 +263,7 @@ extension MachoOParser {
                     precondition(size <= UInt64(Int.max), "Mach object too large")
                     let rebased = UnsafeMutableRawBufferPointer(
                         rebasing: pointer[Int(offset) ..< Int(offset) + Int(size)])
-                    try handler(rebased)
+                    try handler(rebased, &context)
                     
                 default:
                     throw .invalidMagic
@@ -235,7 +275,10 @@ extension MachoOParser {
     
     /// Parse the load commands of a Mach object.
     /// Only 64-bit Mach objects are supported.
-    func parseLoadCommands(_ machObjectPointer: UnsafeMutableRawBufferPointer) throws(ParserError) {
+    func parseLoadCommands(
+        _ machObjectPointer: UnsafeMutableRawBufferPointer,
+        context: inout Context
+    ) throws(ParserError) {
         guard
             machObjectPointer.count >= MemoryLayout<mach_header_64>.size,
             let baseAddress = machObjectPointer.baseAddress
@@ -261,8 +304,6 @@ extension MachoOParser {
         }
         
         print("Architecture: \(nameForCPUType(cpuType))")
-        print("\(ncmds) commands")
-        print("\(sizeofcmds) bytes for all commands")
         
         let requiredSize = machHeaderSize + Int(sizeofcmds)
         if machObjectPointer.count < requiredSize {
@@ -290,25 +331,33 @@ extension MachoOParser {
             
             switch cmd {
             case UInt32(LC_UUID):
-                assert(cmdsize == MemoryLayout<uuid_command>.size)
                 let uuidCommand = commandSlice.load(as: uuid_command.self)
-                print("UUID: \(UUID(uuid: uuidCommand.uuid))")
+                print("\tUUID: \(UUID(uuid: uuidCommand.uuid))")
+                
+            case UInt32(LC_CODE_SIGNATURE):
+                context.hasSignature = true
                 
             case UInt32(LC_LOAD_DYLIB):
-                assert(cmdsize >= MemoryLayout<dylib_command>.size)
-                let dylibCommand = commandSlice.load(as: dylib_command.self)
-                let name = String(dylibCommand.dylib.name, in: commandSlice)
-                print("Load dynamic library: '\(name)'")
+                try processLoadCommand(
+                    name: "Load dynamic library",
+                    commandSlice: commandSlice,
+                    context: &context
+                )
                 
             case UInt32(LC_LOAD_WEAK_DYLIB):
-                assert(cmdsize >= MemoryLayout<dylib_command>.size)
-                let dylibCommand = commandSlice.load(as: dylib_command.self)
-                let name = String(dylibCommand.dylib.name, in: commandSlice)
-                print("Load weak dynamic library: '\(name)'")
-                
+                try processLoadCommand(
+                    name: "Load weak dynamic library",
+                    commandSlice: commandSlice,
+                    context: &context
+                )
+
             case UInt32(LC_LAZY_LOAD_DYLIB):
-                print("Lazy load dynamic library")
-                
+                try processLoadCommand(
+                    name: "Lazy load dynamic library",
+                    commandSlice: commandSlice,
+                    context: &context
+                )
+
             default:
                 break
             }
@@ -318,6 +367,36 @@ extension MachoOParser {
         }
         
         assert(sizeofcmds == accumulatedCommandSizes)
+    }
+    
+    
+    func processLoadCommand(
+        name: String,
+        commandSlice: UnsafeMutableRawBufferPointer.SubSequence,
+        context: inout Context
+    ) throws(ParserError) {
+        let dylibCommand = commandSlice.load(as: dylib_command.self)
+        
+        // There is a second format, `dyld_use_command`. It can be identified by
+        // dylibCommand.dylib.timestamp == DYLIB_USE_MARKER (probably need to watch out for
+        // endianess). For our use, the difference doesn't matter.
+        
+        let (path, pathslice) = try String.from(dylibCommand.dylib.name, in: commandSlice)
+        print("\t\(name): '\(path)'")
+        
+        guard var replacement = self.replace[path] else { return }
+        
+        print("\t\tReplacing with: \(replacement)")
+        assert(replacement.count <= path.count, "This should have been handled earlier")
+        
+        // Clear out old path.
+        pathslice.initializeMemory(as: UInt8.self, repeating: 0)
+        // Copy in new path.
+        replacement.withUTF8 {
+            pathslice.copyBytes(from: $0)
+        }
+        
+        context.didReplace.insert(replacement)
     }
     
     

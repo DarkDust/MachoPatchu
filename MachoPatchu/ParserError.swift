@@ -17,6 +17,9 @@ enum ParserError: Error {
     
     /// 32-bit targets are not supported.
     case unsupported32bit
+    
+    /// Some library paths to patch were not found.
+    case librariesNotFound([String])
 }
 
 
@@ -33,6 +36,14 @@ extension ParserError: CustomStringConvertible {
             
         case .unsupported32bit:
             return "32-bit targets are not supported."
+            
+        case .librariesNotFound(let libraries):
+            if libraries.count == 1 {
+                return "Library path was not found in Mach-O file: \(libraries.first!)"
+            } else {
+                return "Library paths were not found in Mach-O file: "
+                    + libraries.joined(separator: ", ")
+            }
         }
     }
     

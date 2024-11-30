@@ -54,6 +54,10 @@ struct MachoPatchu: ParsableCommand {
     var replace: [(String, String)]
     
     
+    @Flag(name: .shortAndLong, help: "Enable verbose output.")
+    var verbose: Bool = false
+    
+    
     mutating func run() {
         let data: Data
         let inputURL = URL(
@@ -69,11 +73,39 @@ struct MachoPatchu: ParsableCommand {
             return
         }
         
-        let parser = MachoOParser(data: data)
+        let parser = MachOParser(data: data, replace: self.replace, verbose: self.verbose)
+        let result: MachOParser.Result
         do {
-            try parser.parse()
+            result = try parser.parse()
         } catch {
-            fputs("Failed to process \(inputURL.lastPathComponent): \(error)\n", stderr)
+            fputs("Failed to process \(inputFile): \(error)\n", stderr)
+            Darwin.exit(1)
+        }
+        
+        do {
+            let outputURL: URL
+            if let outputFile {
+                outputURL = URL(
+                    filePath: outputFile,
+                    directoryHint: .checkFileSystem,
+                    relativeTo: .currentDirectory()
+                )
+            } else {
+                outputURL = inputURL
+            }
+            
+            try result.data.write(to: outputURL)
+            
+        } catch {
+            fputs("Failed to write \(outputFile ?? inputFile): \(error)\n", stderr)
+            Darwin.exit(1)
+        }
+        
+        if result.hasSignature {
+            print(
+                "\(outputFile ?? inputFile) successfully written, "
+                + "but needs resigning since its code signature is now invalid."
+            )
         }
     }
     
