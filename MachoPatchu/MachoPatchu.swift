@@ -65,7 +65,7 @@ struct MachoPatchu: ParsableCommand {
         do {
             data = try Data(contentsOf: inputURL)
         } catch {
-            print(stderr, "Error reading \(inputFile): \(error)")
+            fputs("Error reading \(inputFile): \(error)\n", stderr)
             return
         }
         
@@ -73,7 +73,7 @@ struct MachoPatchu: ParsableCommand {
         do {
             try parser.parse()
         } catch {
-            print(stderr, "Failed to process \(inputURL.lastPathComponent): \(error)")
+            fputs("Failed to process \(inputURL.lastPathComponent): \(error)\n", stderr)
         }
     }
     

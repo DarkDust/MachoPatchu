@@ -8,11 +8,6 @@
 import Foundation
 import MachO
 
-enum ParserError: Error {
-    case fileTooSmall
-    case invalidMagic
-    case unsupported32bit
-}
 
 /// Type of the MachO file.
 private
