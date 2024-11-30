@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		49210D972CFB613400B3C375 /* ArgumentParser in Frameworks */ = {isa = PBXBuildFile; productRef = 49210D962CFB613400B3C375 /* ArgumentParser */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXCopyFilesBuildPhase section */
 		493288912CFA72A800A8F68D /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
@@ -35,6 +39,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				49210D972CFB613400B3C375 /* ArgumentParser in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -77,6 +82,7 @@
 			);
 			name = MachoPatchu;
 			packageProductDependencies = (
+				49210D962CFB613400B3C375 /* ArgumentParser */,
 			);
 			productName = MachoPatchu;
 			productReference = 493288932CFA72A800A8F68D /* MachoPatchu */;
@@ -106,6 +112,9 @@
 			);
 			mainGroup = 4932888A2CFA72A800A8F68D;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				49210D952CFB613400B3C375 /* XCRemoteSwiftPackageReference "swift-argument-parser" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 493288942CFA72A800A8F68D /* Products */;
 			projectDirPath = "";
@@ -285,6 +294,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		49210D952CFB613400B3C375 /* XCRemoteSwiftPackageReference "swift-argument-parser" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-argument-parser.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.5.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		49210D962CFB613400B3C375 /* ArgumentParser */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 49210D952CFB613400B3C375 /* XCRemoteSwiftPackageReference "swift-argument-parser" */;
+			productName = ArgumentParser;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 4932888B2CFA72A800A8F68D /* Project object */;
 }
