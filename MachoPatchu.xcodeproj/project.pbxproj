@@ -23,6 +23,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		49210D9A2CFBCAB700B3C375 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		493288932CFA72A800A8F68D /* MachoPatchu */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = MachoPatchu; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -49,6 +50,7 @@
 		4932888A2CFA72A800A8F68D = {
 			isa = PBXGroup;
 			children = (
+				49210D9A2CFBCAB700B3C375 /* README.md */,
 				493288952CFA72A800A8F68D /* MachoPatchu */,
 				493288942CFA72A800A8F68D /* Products */,
 			);
